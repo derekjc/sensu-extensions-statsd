@@ -160,23 +160,26 @@ module Sensu
       def setup_parser # rubocop:disable Metrics/MethodLength
         parser = proc do |data|
           begin
-            nv, type, raw_sample = data.strip.split('|')
-            name, raw_value = nv.split(':')
-            value = Float(raw_value)
-            sample = Float(raw_sample ? raw_sample.split('@').last : 1)
-            case type
-            when 'g'
-              if raw_value.start_with?('+')
-                @gauges[name] += value
-              elsif raw_value.start_with?('-')
-                @gauges[name] -= value.abs
-              else
-                @gauges[name] = value
+            metrics = data.split("\n")
+            metrics.each do |metric|
+              nv, type, raw_sample = metric.strip.split('|')
+              name, raw_value = nv.split(':')
+              value = Float(raw_value)
+              sample = Float(raw_sample ? raw_sample.split('@').last : 1)
+              case type
+              when 'g'
+                if raw_value.start_with?('+')
+                  @gauges[name] += value
+                elsif raw_value.start_with?('-')
+                  @gauges[name] -= value.abs
+                else
+                  @gauges[name] = value
+                end
+              when /^c/, 'm'
+                @counters[name] += value * (1 / sample)
+              when 'ms', 'h', 't'
+                @timers[name] << value * (1 / sample)
               end
-            when /^c/, 'm'
-              @counters[name] += value * (1 / sample)
-            when 'ms', 'h', 't'
-              @timers[name] << value * (1 / sample)
             end
           rescue => error
             @logger.error('statsd parser error', error: error.to_s)
